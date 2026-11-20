@@ -2,25 +2,29 @@ package com.ciroc.antcc.agentes;
 
 import com.ciroc.antcc.ambiente.Ambiente;
 import com.ciroc.antcc.ambiente.Posicao;
+import com.ciroc.antcc.ambiente.TipoCelula;
 import com.ciroc.antcc.ambiente.TipoFeromonio;
 import jade.core.Agent;
-import jade.core.behaviours.FSMBehaviour;
+import jade.core.behaviours.TickerBehaviour;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
 public class Formiga extends Agent {
 
-    static final String PROCURANDO_ALIMENTO = "procurando-alimento";
-    static final String RETORNANDO_AO_NINHO = "retornando-ao-ninho";
+    public enum Estado {
+        PROCURANDO_ALIMENTO,
+        RETORNANDO_AO_NINHO
+    }
 
-    static final int ENCONTROU_ALIMENTO = 1;
-    static final int CHEGOU_AO_NINHO = 2;
+    private static final double DESVIO_NO_RETORNO = 0.2;
 
     private Ambiente ambiente;
     private ParametrosFormiga parametros;
     private Random aleatorio;
 
+    private Estado estado = Estado.PROCURANDO_ALIMENTO;
     private Posicao posicao;
     private Posicao anterior;
     private boolean carregandoAlimento;
@@ -43,14 +47,15 @@ public class Formiga extends Agent {
         }
         publicar();
 
-        FSMBehaviour ciclo = new FSMBehaviour(this);
-        ciclo.registerFirstState(new ProcurandoAlimento(this), PROCURANDO_ALIMENTO);
-        ciclo.registerState(new RetornandoAoNinho(this), RETORNANDO_AO_NINHO);
-        ciclo.registerTransition(PROCURANDO_ALIMENTO, RETORNANDO_AO_NINHO, ENCONTROU_ALIMENTO,
-                new String[]{RETORNANDO_AO_NINHO});
-        ciclo.registerTransition(RETORNANDO_AO_NINHO, PROCURANDO_ALIMENTO, CHEGOU_AO_NINHO,
-                new String[]{PROCURANDO_ALIMENTO});
-        addBehaviour(ciclo);
+        addBehaviour(new TickerBehaviour(this, parametros.periodoMs()) {
+            @Override
+            protected void onTick() {
+                switch (estado) {
+                    case PROCURANDO_ALIMENTO -> procurarAlimento();
+                    case RETORNANDO_AO_NINHO -> retornarAoNinho();
+                }
+            }
+        });
     }
 
     @Override
@@ -60,48 +65,46 @@ public class Formiga extends Agent {
         }
     }
 
-    // --- Operações usadas pelos estados -------------------------------------------------------
+    private void procurarAlimento() {
+        if (ambiente.tipo(posicao.x(), posicao.y()) == TipoCelula.ALIMENTO && ambiente.coletarAlimento(posicao)) {
+            carregandoAlimento = true;
+            estado = Estado.RETORNANDO_AO_NINHO;
+            publicar();
+            return;
+        }
 
-    Ambiente ambiente() {
-        return ambiente;
+        moverPara(vizinhoAleatorio());
+        depositar(TipoFeromonio.NINHO);
     }
 
-    ParametrosFormiga parametros() {
-        return parametros;
+    private void retornarAoNinho() {
+        Posicao ninho = ambiente.getNinho();
+        if (posicao.equals(ninho)) {
+            ambiente.entregarAlimento();
+            carregandoAlimento = false;
+            estado = Estado.PROCURANDO_ALIMENTO;
+            publicar();
+            return;
+        }
+
+        Posicao proximo = aleatorio.nextDouble() < DESVIO_NO_RETORNO
+                ? vizinhoAleatorio()
+                : vizinhoMaisPerto(ninho);
+        moverPara(proximo);
+        depositar(TipoFeromonio.ALIMENTO);
     }
 
-    Random aleatorio() {
-        return aleatorio;
-    }
-
-    Posicao posicao() {
-        return posicao;
-    }
-
-    Posicao anterior() {
-        return anterior;
-    }
-
-    boolean isCarregandoAlimento() {
-        return carregandoAlimento;
-    }
-
-    void setCarregandoAlimento(boolean carregando) {
-        this.carregandoAlimento = carregando;
-        publicar();
-    }
-
-    void moverPara(Posicao destino) {
+    private void moverPara(Posicao destino) {
         anterior = posicao;
         posicao = destino;
         publicar();
     }
 
-    void depositar(TipoFeromonio tipo) {
+    private void depositar(TipoFeromonio tipo) {
         ambiente.depositarFeromonio(posicao, tipo, parametros.depositoFeromonio());
     }
 
-    Posicao vizinhoAleatorio() {
+    private Posicao vizinhoAleatorio() {
         List<Posicao> vizinhos = ambiente.vizinhos(posicao);
         if (vizinhos.isEmpty()) {
             return posicao;
@@ -110,6 +113,22 @@ public class Formiga extends Agent {
             vizinhos = vizinhos.stream().filter(v -> !v.equals(anterior)).toList();
         }
         return vizinhos.get(aleatorio.nextInt(vizinhos.size()));
+    }
+
+    private Posicao vizinhoMaisPerto(Posicao alvo) {
+        List<Posicao> melhores = new ArrayList<>();
+        int menor = Integer.MAX_VALUE;
+        for (Posicao v : ambiente.vizinhos(posicao)) {
+            int d = v.distancia(alvo);
+            if (d < menor) {
+                menor = d;
+                melhores.clear();
+            }
+            if (d == menor) {
+                melhores.add(v);
+            }
+        }
+        return melhores.isEmpty() ? posicao : melhores.get(aleatorio.nextInt(melhores.size()));
     }
 
     private void publicar() {
