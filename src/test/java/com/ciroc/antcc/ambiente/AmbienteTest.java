@@ -80,4 +80,32 @@ class AmbienteTest {
         assertNotNull(a.getNinho());
         assertEquals(2, a.getFontesAlimento().size());
     }
+
+    @Test
+    void feromonioAcumulaPorTipoAteOMaximo() {
+        Ambiente a = new Ambiente(5, 5);
+        Posicao p = new Posicao(2, 2);
+        a.depositarFeromonio(p, TipoFeromonio.NINHO, 3f);
+        a.depositarFeromonio(p, TipoFeromonio.NINHO, 4f);
+        assertEquals(7f, a.feromonio(p, TipoFeromonio.NINHO));
+        assertEquals(0f, a.feromonio(p, TipoFeromonio.ALIMENTO));
+
+        a.depositarFeromonio(p, TipoFeromonio.ALIMENTO, 1000f);
+        assertEquals(TipoFeromonio.MAXIMO, a.feromonio(p, TipoFeromonio.ALIMENTO));
+        assertEquals(TipoFeromonio.MAXIMO,
+                a.instantaneoFeromonio()[TipoFeromonio.ALIMENTO.ordinal()][2][2]);
+    }
+
+    @Test
+    void registraFormigas() {
+        Ambiente a = new Ambiente(5, 5);
+        a.atualizarFormiga("f1", new Posicao(1, 1), false);
+        a.atualizarFormiga("f1", new Posicao(1, 2), true);
+        a.atualizarFormiga("f2", new Posicao(0, 0), false);
+        assertEquals(2, a.getFormigas().size());
+        assertEquals(new PosicaoFormiga(new Posicao(1, 2), true), a.getFormigas().get(0));
+
+        a.removerFormiga("f1");
+        assertEquals(1, a.getFormigas().size());
+    }
 }

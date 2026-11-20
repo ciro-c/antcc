@@ -2,7 +2,9 @@ package com.ciroc.antcc.ambiente;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 
 public class Ambiente {
@@ -11,7 +13,10 @@ public class Ambiente {
     private final int altura;
     private final Celula[][] celulas;
     private final List<Posicao> fontesAlimento = new ArrayList<>();
+    private final float[][][] feromonio;
+    private final Map<String, PosicaoFormiga> formigas = new LinkedHashMap<>();
     private Posicao ninho;
+    private int alimentoNoNinho;
 
     public Ambiente(int largura, int altura) {
         if (largura <= 0 || altura <= 0) {
@@ -20,6 +25,7 @@ public class Ambiente {
         this.largura = largura;
         this.altura = altura;
         this.celulas = new Celula[largura][altura];
+        this.feromonio = new float[TipoFeromonio.values().length][largura][altura];
         for (int x = 0; x < largura; x++) {
             for (int y = 0; y < altura; y++) {
                 celulas[x][y] = new Celula();
@@ -114,6 +120,51 @@ public class Ambiente {
             }
         }
         return vizinhos;
+    }
+
+    public synchronized void depositarFeromonio(Posicao p, TipoFeromonio tipo, float quantidade) {
+        if (quantidade < 0) {
+            throw new IllegalArgumentException("Quantidade de feromônio não pode ser negativa");
+        }
+        celula(p.x(), p.y());
+        float[][] camada = feromonio[tipo.ordinal()];
+        camada[p.x()][p.y()] = Math.min(TipoFeromonio.MAXIMO, camada[p.x()][p.y()] + quantidade);
+    }
+
+    public synchronized float feromonio(Posicao p, TipoFeromonio tipo) {
+        celula(p.x(), p.y());
+        return feromonio[tipo.ordinal()][p.x()][p.y()];
+    }
+
+    public synchronized float[][][] instantaneoFeromonio() {
+        float[][][] copia = new float[feromonio.length][largura][];
+        for (int t = 0; t < feromonio.length; t++) {
+            for (int x = 0; x < largura; x++) {
+                copia[t][x] = feromonio[t][x].clone();
+            }
+        }
+        return copia;
+    }
+
+    public synchronized void atualizarFormiga(String nome, Posicao p, boolean carregandoAlimento) {
+        celula(p.x(), p.y());
+        formigas.put(nome, new PosicaoFormiga(p, carregandoAlimento));
+    }
+
+    public synchronized void removerFormiga(String nome) {
+        formigas.remove(nome);
+    }
+
+    public synchronized List<PosicaoFormiga> getFormigas() {
+        return List.copyOf(formigas.values());
+    }
+
+    public synchronized void entregarAlimento() {
+        alimentoNoNinho++;
+    }
+
+    public synchronized int getAlimentoNoNinho() {
+        return alimentoNoNinho;
     }
 
     public synchronized TipoCelula[][] instantaneo() {
