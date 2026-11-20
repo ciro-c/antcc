@@ -7,7 +7,6 @@ import com.ciroc.antcc.ambiente.TipoFeromonio;
 import jade.core.Agent;
 import jade.core.behaviours.TickerBehaviour;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
@@ -18,7 +17,8 @@ public class Formiga extends Agent {
         RETORNANDO_AO_NINHO
     }
 
-    private static final double DESVIO_NO_RETORNO = 0.2;
+    private static final double FEROMONIO_BASE = 1.0;
+    private static final double PERSISTENCIA = 1.5;
 
     private Ambiente ambiente;
     private ParametrosFormiga parametros;
@@ -28,6 +28,7 @@ public class Formiga extends Agent {
     private Posicao posicao;
     private Posicao anterior;
     private boolean carregandoAlimento;
+    private int passosDesdeOrigem;
 
     @Override
     protected void setup() {
@@ -69,11 +70,14 @@ public class Formiga extends Agent {
         if (ambiente.tipo(posicao.x(), posicao.y()) == TipoCelula.ALIMENTO && ambiente.coletarAlimento(posicao)) {
             carregandoAlimento = true;
             estado = Estado.RETORNANDO_AO_NINHO;
+            passosDesdeOrigem = 0;
+            anterior = null;
             publicar();
             return;
         }
 
-        moverPara(vizinhoAleatorio());
+        Posicao alimento = vizinhoDoTipo(TipoCelula.ALIMENTO);
+        moverPara(alimento != null ? alimento : escolherDirecao(TipoFeromonio.ALIMENTO, rumoAtual()));
         depositar(TipoFeromonio.NINHO);
     }
 
@@ -83,52 +87,102 @@ public class Formiga extends Agent {
             ambiente.entregarAlimento();
             carregandoAlimento = false;
             estado = Estado.PROCURANDO_ALIMENTO;
+            passosDesdeOrigem = 0;
+            anterior = null;
             publicar();
             return;
         }
 
-        Posicao proximo = aleatorio.nextDouble() < DESVIO_NO_RETORNO
-                ? vizinhoAleatorio()
-                : vizinhoMaisPerto(ninho);
+        Posicao proximo;
+        if (posicao.distancia(ninho) == 1 && ambiente.isTransitavel(ninho)) {
+            proximo = ninho;
+        } else {
+            proximo = escolherDirecao(TipoFeromonio.NINHO, rumoPara(ninho));
+        }
         moverPara(proximo);
         depositar(TipoFeromonio.ALIMENTO);
+    }
+
+    private Posicao escolherDirecao(TipoFeromonio guia, double[] rumo) {
+        List<Posicao> candidatos = candidatos();
+        if (candidatos.isEmpty()) {
+            return posicao;
+        }
+        double[] pesos = new double[candidatos.size()];
+        for (int i = 0; i < pesos.length; i++) {
+            Posicao v = candidatos.get(i);
+            double concentracao = ambiente.feromonio(v, guia);
+            pesos[i] = Math.pow(FEROMONIO_BASE + concentracao, parametros.influenciaFeromonio())
+                    * Math.exp(PERSISTENCIA * alinhamento(v, rumo));
+        }
+        return candidatos.get(sortear(pesos, aleatorio));
+    }
+
+    private double[] rumoAtual() {
+        return anterior == null
+                ? new double[]{0, 0}
+                : new double[]{posicao.x() - anterior.x(), posicao.y() - anterior.y()};
+    }
+
+    private double[] rumoPara(Posicao alvo) {
+        return new double[]{alvo.x() - posicao.x(), alvo.y() - posicao.y()};
+    }
+
+    private double alinhamento(Posicao vizinho, double[] rumo) {
+        double rx = rumo[0], ry = rumo[1];
+        double mx = vizinho.x() - posicao.x(), my = vizinho.y() - posicao.y();
+        double normas = Math.hypot(rx, ry) * Math.hypot(mx, my);
+        return normas == 0 ? 0 : (rx * mx + ry * my) / normas;
+    }
+
+    static int sortear(double[] pesos, Random aleatorio) {
+        double total = 0;
+        for (double p : pesos) {
+            total += p;
+        }
+        double alvo = aleatorio.nextDouble() * total;
+        for (int i = 0; i < pesos.length; i++) {
+            alvo -= pesos[i];
+            if (alvo < 0) {
+                return i;
+            }
+        }
+        return pesos.length - 1;
+    }
+
+    private Posicao vizinhoDoTipo(TipoCelula tipo) {
+        for (Posicao v : ambiente.vizinhos(posicao)) {
+            if (ambiente.tipo(v.x(), v.y()) == tipo) {
+                return v;
+            }
+        }
+        return null;
+    }
+
+    private List<Posicao> candidatos() {
+        List<Posicao> vizinhos = ambiente.vizinhos(posicao);
+        if (anterior == null) {
+            return vizinhos;
+        }
+        int dx = posicao.x() - anterior.x();
+        int dy = posicao.y() - anterior.y();
+        List<Posicao> aFrente = vizinhos.stream()
+                .filter(v -> (v.x() - posicao.x()) * dx + (v.y() - posicao.y()) * dy >= 0)
+                .toList();
+        return aFrente.isEmpty() ? vizinhos : aFrente;
     }
 
     private void moverPara(Posicao destino) {
         anterior = posicao;
         posicao = destino;
+        passosDesdeOrigem++;
         publicar();
     }
 
     private void depositar(TipoFeromonio tipo) {
-        ambiente.depositarFeromonio(posicao, tipo, parametros.depositoFeromonio());
-    }
-
-    private Posicao vizinhoAleatorio() {
-        List<Posicao> vizinhos = ambiente.vizinhos(posicao);
-        if (vizinhos.isEmpty()) {
-            return posicao;
-        }
-        if (vizinhos.size() > 1 && anterior != null) {
-            vizinhos = vizinhos.stream().filter(v -> !v.equals(anterior)).toList();
-        }
-        return vizinhos.get(aleatorio.nextInt(vizinhos.size()));
-    }
-
-    private Posicao vizinhoMaisPerto(Posicao alvo) {
-        List<Posicao> melhores = new ArrayList<>();
-        int menor = Integer.MAX_VALUE;
-        for (Posicao v : ambiente.vizinhos(posicao)) {
-            int d = v.distancia(alvo);
-            if (d < menor) {
-                menor = d;
-                melhores.clear();
-            }
-            if (d == menor) {
-                melhores.add(v);
-            }
-        }
-        return melhores.isEmpty() ? posicao : melhores.get(aleatorio.nextInt(melhores.size()));
+        float quantidade = (float) (parametros.depositoFeromonio()
+                * Math.pow(parametros.decaimentoDeposito(), passosDesdeOrigem));
+        ambiente.depositarFeromonio(posicao, tipo, quantidade);
     }
 
     private void publicar() {

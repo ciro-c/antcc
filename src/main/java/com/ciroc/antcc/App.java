@@ -4,6 +4,7 @@ import com.ciroc.antcc.agentes.Formiga;
 import com.ciroc.antcc.agentes.ParametrosFormiga;
 import com.ciroc.antcc.ambiente.Ambiente;
 import com.ciroc.antcc.ambiente.Cenarios;
+import com.ciroc.antcc.ambiente.Evaporacao;
 import com.ciroc.antcc.plataforma.PlataformaJade;
 import com.ciroc.antcc.render.Janela;
 import com.ciroc.antcc.render.RenderizadorAmbiente;
@@ -13,6 +14,8 @@ public final class App {
     private static final int LARGURA_JANELA = 1024;
     private static final int ALTURA_JANELA = 768;
     private static final int FORMIGAS_PADRAO = 50;
+    private static final String TAXA_EVAPORACAO_PADRAO = "0.005";
+    private static final long PERIODO_EVAPORACAO_PADRAO = 100;
 
     private App() {
     }
@@ -20,10 +23,13 @@ public final class App {
     public static void main(String[] args) {
         boolean guiJade = Boolean.getBoolean("antcc.jade.gui");
         int quantidadeFormigas = Integer.getInteger("antcc.formigas", FORMIGAS_PADRAO);
+        float taxaEvaporacao = Float.parseFloat(System.getProperty("antcc.evaporacao.taxa", TAXA_EVAPORACAO_PADRAO));
+        long periodoEvaporacao = Long.getLong("antcc.evaporacao.periodo", PERIODO_EVAPORACAO_PADRAO);
 
         Ambiente ambiente = Cenarios.c1();
 
-        try (PlataformaJade plataforma = new PlataformaJade(guiJade);
+        try (Evaporacao evaporacao = new Evaporacao(ambiente, taxaEvaporacao, periodoEvaporacao);
+             PlataformaJade plataforma = new PlataformaJade(guiJade);
              Janela janela = new Janela("antcc", LARGURA_JANELA, ALTURA_JANELA)) {
             plataforma.iniciarAgentes("formiga", quantidadeFormigas, Formiga.class,
                     ambiente, ParametrosFormiga.padrao());

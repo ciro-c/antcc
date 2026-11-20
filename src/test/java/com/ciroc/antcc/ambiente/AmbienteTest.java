@@ -108,4 +108,49 @@ class AmbienteTest {
         a.removerFormiga("f1");
         assertEquals(1, a.getFormigas().size());
     }
+
+    @Test
+    void evaporacaoReduzTodasAsCamadas() {
+        Ambiente a = new Ambiente(3, 3);
+        Posicao p = new Posicao(1, 1);
+        a.depositarFeromonio(p, TipoFeromonio.NINHO, 10f);
+        a.depositarFeromonio(p, TipoFeromonio.ALIMENTO, 20f);
+
+        a.evaporar(0.1f);
+        assertEquals(9f, a.feromonio(p, TipoFeromonio.NINHO), 1e-5);
+        assertEquals(18f, a.feromonio(p, TipoFeromonio.ALIMENTO), 1e-5);
+
+        a.evaporar(0f);
+        assertEquals(9f, a.feromonio(p, TipoFeromonio.NINHO), 1e-5);
+    }
+
+    @Test
+    void evaporacaoZeraValoresMuitoPequenos() {
+        Ambiente a = new Ambiente(3, 3);
+        Posicao p = new Posicao(0, 0);
+        a.depositarFeromonio(p, TipoFeromonio.NINHO, TipoFeromonio.MINIMO);
+        a.evaporar(0.5f);
+        assertEquals(0f, a.feromonio(p, TipoFeromonio.NINHO));
+    }
+
+    @Test
+    void taxaDeEvaporacaoInvalida() {
+        Ambiente a = new Ambiente(3, 3);
+        assertThrows(IllegalArgumentException.class, () -> a.evaporar(-0.1f));
+        assertThrows(IllegalArgumentException.class, () -> a.evaporar(1.5f));
+    }
+
+    @Test
+    void processoDeEvaporacaoAtuaPeriodicamente() throws InterruptedException {
+        Ambiente a = new Ambiente(3, 3);
+        Posicao p = new Posicao(1, 1);
+        a.depositarFeromonio(p, TipoFeromonio.ALIMENTO, 50f);
+        try (Evaporacao ignorada = new Evaporacao(a, 0.5f, 5)) {
+            long limite = System.currentTimeMillis() + 2_000;
+            while (a.feromonio(p, TipoFeromonio.ALIMENTO) > 0 && System.currentTimeMillis() < limite) {
+                Thread.sleep(5);
+            }
+        }
+        assertEquals(0f, a.feromonio(p, TipoFeromonio.ALIMENTO));
+    }
 }

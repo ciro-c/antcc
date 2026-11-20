@@ -146,6 +146,21 @@ public class Ambiente {
         return copia;
     }
 
+    public synchronized void evaporar(float taxa) {
+        if (taxa < 0 || taxa > 1) {
+            throw new IllegalArgumentException("Taxa de evaporação deve estar em [0, 1]");
+        }
+        float fator = 1f - taxa;
+        for (float[][] camada : feromonio) {
+            for (float[] coluna : camada) {
+                for (int y = 0; y < coluna.length; y++) {
+                    float v = coluna[y] * fator;
+                    coluna[y] = v < TipoFeromonio.MINIMO ? 0f : v;
+                }
+            }
+        }
+    }
+
     public synchronized void atualizarFormiga(String nome, Posicao p, boolean carregandoAlimento) {
         celula(p.x(), p.y());
         formigas.put(nome, new PosicaoFormiga(p, carregandoAlimento));

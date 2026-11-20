@@ -6,6 +6,8 @@ import com.ciroc.antcc.ambiente.TipoFeromonio;
 import com.ciroc.antcc.plataforma.PlataformaJade;
 import org.junit.jupiter.api.Test;
 
+import java.util.Random;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class FormigaTest {
@@ -18,7 +20,7 @@ class FormigaTest {
 
         try (PlataformaJade plataforma = new PlataformaJade(false)) {
             plataforma.iniciarAgente("formiga-teste", Formiga.class,
-                    ambiente, new ParametrosFormiga(1, 1f, 42L));
+                    ambiente, new ParametrosFormiga(1, 10f, 0.97f, 2.0, 42L));
 
             long limite = System.currentTimeMillis() + 20_000;
             while (ambiente.getAlimentoNoNinho() < 2 && System.currentTimeMillis() < limite) {
@@ -32,6 +34,31 @@ class FormigaTest {
         float[][][] f = ambiente.instantaneoFeromonio();
         assertTrue(soma(f[TipoFeromonio.NINHO.ordinal()]) > 0);
         assertTrue(soma(f[TipoFeromonio.ALIMENTO.ordinal()]) > 0);
+    }
+
+    @Test
+    void sorteioFavoreceCelulasComMaisFeromonio() {
+        Random aleatorio = new Random(7);
+        double[] pesos = {1, 1, 98};
+        int[] contagem = new int[3];
+        for (int i = 0; i < 10_000; i++) {
+            contagem[Formiga.sortear(pesos, aleatorio)]++;
+        }
+        assertTrue(contagem[2] > 9_500, "a célula com mais feromônio deveria ser escolhida quase sempre");
+        assertTrue(contagem[0] > 0 && contagem[1] > 0, "as demais ainda devem ter chance de ser escolhidas");
+    }
+
+    @Test
+    void sorteioComPesosIguaisEUniforme() {
+        Random aleatorio = new Random(7);
+        double[] pesos = {1, 1, 1, 1};
+        int[] contagem = new int[4];
+        for (int i = 0; i < 40_000; i++) {
+            contagem[Formiga.sortear(pesos, aleatorio)]++;
+        }
+        for (int c : contagem) {
+            assertEquals(10_000, c, 500);
+        }
     }
 
     private static float soma(float[][] camada) {
